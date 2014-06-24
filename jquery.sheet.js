@@ -393,6 +393,7 @@ jQuery = jQuery || window.jQuery;
          */
         sheet:function (settings) {
             var n = isNaN,
+                n2 = function(v) { return typeof(v) != "number" },
                 events = $.sheet.events;
 
             settings = settings || {};
@@ -572,12 +573,11 @@ jQuery = jQuery || window.jQuery;
                                 return value.substring(0, this.value.length - 1) / 100;
                             }
                         },
-                        cellTypeHandlers: {
+                        cellTypeHandlers: {                                                	
                             percent: function(value) {
-                                var num = (n(value) ? globalize.parseFloat(value) : value * 1),
-                                    result;
-
-                                if (!n(num)) {//success
+                                var num = (n2(value) ? globalize.parseFloat(value) : value),
+                                    result;  
+                                if (!n2(num)) {//success
                                     result = new Number(num);
                                     result.html = globalize.format(num, 'p');
                                     return result;
@@ -587,25 +587,24 @@ jQuery = jQuery || window.jQuery;
                             },
                             date: function(value) {
                                 var date = globalize.parseDate(value);
-                                date.html = globalize.format(date, 'd');
+                                if (date) date.html = globalize.format(date, 'd');
                                 return date;
                             },
                             time: function(value) {
                                 var date = globalize.parseDate(value);
-                                date.html = globalize.format(date, 't');
+                                if (date) date.html = globalize.format(date, 't');
                                 return date;
                             },
-                            currency: function(value) {
-                                var num = (n(value) ? globalize.parseFloat(value) : value * 1),
+                            currency: function(value) {                            	
+                                var num = (n2(value) ? globalize.parseFloat(value) : value),
                                     result;
 
-                                if (!n(num)) {//success
+                                if (!n2(num)) {//success
                                     result = new Number(num);
-                                    result.html = globalize.format(num, 'c');
+                                    result.html = globalize.format(num, 'c');                                 
                                     return result;
-                                }
-
-                                return value;
+                                }                              
+                                return num;
                             },
                             number: function(value) {
                                 var radix, result;
@@ -614,7 +613,7 @@ jQuery = jQuery || window.jQuery;
                                     settings.endOfNumber = new RegExp("([" + (radix == '.' ? "\." : radix) + "])([0-9]*?[1-9]+)?(0)*$");
                                 }
 
-                                if (!n(value)) {//success
+                                if (!n2(value)) {//success
                                     result = new Number(value);
                                     result.html = globalize.format(value + '', "n10")
                                         .replace(settings.endOfNumber, function (orig, radix, num) {
@@ -1054,6 +1053,7 @@ jQuery = jQuery || window.jQuery;
             'sheetCellEdit',
             'sheetCellEdited',
             'sheetCalculation',
+            "sheetUpdate",
             'sheetAdd',
             'sheetDelete',
             'sheetDeleteRow',
@@ -1061,6 +1061,7 @@ jQuery = jQuery || window.jQuery;
             'sheetOpen',
             'sheetAllOpened',
             'sheetSave',
+            'sheetScroll',
             'sheetFullScreen',
             'sheetFormulaKeydown'
         ],
@@ -1253,6 +1254,8 @@ jQuery = jQuery || window.jQuery;
                                     calcLast: cell.calcLast,
                                     html: cell.html,
                                     state: cell.state,
+                                    cellType: cell.cellType,
+                                    extra: cell.extra ? JSON.stringify(cell.extra) : null,
                                     jS: cell.jS,
                                     calcDependenciesLast: cell.calcDependenciesLast,
                                     style: cell.style || cell.td.attr('style') || '',
@@ -1766,6 +1769,7 @@ jQuery = jQuery || window.jQuery;
                             formula:td.getAttribute('data-formula') || '',
                             cellType:td.getAttribute('data-celltype') || null,
                             value:td.textContent || td.innerText || '',
+                            extra:JSON.parse(td.getAttribute('data-extra')) || null,
                             calcCount:calcCount || 0,
                             calcLast:calcLast || -1,
                             calcDependenciesLast:calcDependenciesLast || -1,
@@ -2820,7 +2824,7 @@ jQuery = jQuery || window.jQuery;
                             jS.controls.ui = $(ui);
                             return ui;
                         },
-
+                        
                         sheetAdder: function () {
                             var addSheet = doc.createElement('span');
                             if (jS.isSheetEditable()) {
@@ -2902,8 +2906,9 @@ jQuery = jQuery || window.jQuery;
                             scrollOuter.setAttribute('class', jS.cl.scroll);
                             scrollOuter.appendChild(scrollInner);
 
-                            scrollOuter.onscroll = function() {
+                            scrollOuter.onscroll = function() {                               
                                 if (!jS.isBusy()) {
+                                	jS.setBusy(true);
                                     jS.evt.scroll.scrollTo({axis:'x', pixel:scrollOuter.scrollLeft});
                                     jS.evt.scroll.scrollTo({axis:'y', pixel:scrollOuter.scrollTop});
 
@@ -2911,6 +2916,7 @@ jQuery = jQuery || window.jQuery;
                                     if (pane.inPlaceEdit) {
                                         pane.inPlaceEdit.goToTd();
                                     }
+                                    jS.setBusy(false);
                                 }
                             };
 
@@ -3212,6 +3218,8 @@ jQuery = jQuery || window.jQuery;
                             if (jS.isSheetEditable()) {
                                 jS.controlFactory.autoFiller(pane);
                             }
+
+                            // XXX jS.sheetTab(true);
 
                             if (jS.isSheetEditable()) {
                                 var formula = jS.obj.formula(),
@@ -4260,7 +4268,7 @@ jQuery = jQuery || window.jQuery;
 
 
                             jS.obj.formula().blur();
-                            if (e.shiftKey) {
+                            if (e.shiftKey || jS.lock ) {
                                 jS.getTdRange(e, jS.obj.formula().val());
                             } else {
                                 jS.cellEdit($(e.target), true);
@@ -4435,6 +4443,7 @@ jQuery = jQuery || window.jQuery;
                              * @memberOf jS.evt.scroll
                              */
                             scrollTo:function (pos) {
+                            	jS.trigger("sheetScroll");
                                 pos = pos || {};
                                 pos.axis = pos.axis || 'x';
                                 pos.value = pos.value || 0;
@@ -4852,15 +4861,13 @@ jQuery = jQuery || window.jQuery;
                         if (firstLocRaw.row) {
                             jS.setDirty(true);
                             jS.setChanged(true);
-
+                            td = firstTd;
                             if (firstLocRaw.row < lastLocRaw.row) {
                                 firstLoc.row = firstLocRaw.row;
-                                lastLoc.row = lastLocRaw.row;
-                                td = firstTd;
+                                lastLoc.row = lastLocRaw.row;                                
                             } else {
                                 firstLoc.row = lastLocRaw.row;
-                                lastLoc.row = firstLocRaw.row;
-                                td = lastTd;
+                                lastLoc.row = firstLocRaw.row;                                
                             }
 
                             if (td.getAttribute('rowSpan') || td.getAttribute('colSpan')) {
@@ -4886,7 +4893,7 @@ jQuery = jQuery || window.jQuery;
                                 _td = tds[i];
                                 cell = _td.jSCell;
                                 if (cell.formula || cell.value) {
-                                    cellsValue.unshift(cell.formula ? "(" + cell.formula.substring(1) + ")" : cell.value);
+                                    cellsValue.unshift(cell.formula ? cell.formula : cell.value);
                                 }
                                 s.parent.one('sheetPreCalculation', function () {
                                     if (_td.cellIndex != loc.col || _td.parentNode.rowIndex != loc.row) {
@@ -4899,18 +4906,20 @@ jQuery = jQuery || window.jQuery;
                                         _td.removeAttribute('data-formula');
                                         _td.removeAttribute('data-celltype')
                                         _td.innerHTML = '';
-                                        _td.style.display = 'none';
+                                        $(_td).addClasses("merge c"+firstLoc.col+" r"+firstLoc.row);
+                                        // _td.style.display = 'none';
                                     }
                                 });
 
-                                jS.calcDependencies.call(cell);
+                                if (td.jSCell != cell) jS.calcDependencies.call(cell);
                             } while(i--);
 
                             td.jSCell.value = cellsValue.join(' ');
-                            td.jSCell.formula = (td.jSCell.formula ? cellsValue.join(' ') : '');
+                            td.jSCell.formula = (td.jSCell.formula ? cellsValue[0] : '');
                             td.jSCell.calcLast = last;
 
-                            td.style.display = '';
+                            //td.style.display = '';
+                            $(_td).removeClasses("merge c"+firstLoc.col+" r"+firstLoc.row);
                             td.setAttribute('rowSpan', rowSpan);
                             td.setAttribute('colSpan', colSpan);
 
@@ -4993,7 +5002,7 @@ jQuery = jQuery || window.jQuery;
 
                         var startLoc = jS.getTdLocation(cells[0].td),
                             endLoc = jS.getTdLocation(cells[cells.length - 1].td),
-                            relativeLoc = jS.getTdLocation(activeTd),
+                            relativeLoc = jS.getTdLocation(activeTd[0]),
                             offset = {
                                 row:0,
                                 col:0
@@ -5003,19 +5012,20 @@ jQuery = jQuery || window.jQuery;
                             i = cells.length - 1,
                             fn = function() {};
 
-                        v = v || activeTd[0].jSCell.value;
-
+                            v = v || activeTd[0].jSCell.formula ? ("=" + activeTd[0].jSCell.formula) : activeTd[0].jSCell.value;
+ 
                         if (i >= 0) {
                             if (v.charAt && v.charAt(0) == '=') {
                                 if (i >= 0) {
                                     do {
-                                        if (!goUp) {
-                                            offset.row = relativeLoc.row - endLoc.row;
-                                            offset.col = relativeLoc.col - endLoc.col;
-                                        } else {
+                                    	relativeLoc = jS.getTdLocation(cells[i].td);
+                                        //if (!goUp) {
+                                        //    offset.row = relativeLoc.row - endLoc.row;
+                                        //    offset.col = relativeLoc.col - endLoc.col;
+                                        //} else {
                                             offset.row = relativeLoc.row - startLoc.row;
                                             offset.col = relativeLoc.col - startLoc.col;
-                                        }
+                                        //}
 
                                         newV = jS.reparseFormula(v, offset);
 
@@ -5034,11 +5044,11 @@ jQuery = jQuery || window.jQuery;
                                     if (isNumber && newV != '') {
                                         newV *= 1;
 
-                                        if (goUp) {
-                                            newV -= cells.length - 1;
-                                        }
+                                        //if (goUp) {
+                                        newV += cells.length - 1;
+                                        //}
                                         fn = function() {
-                                           newV++;
+                                           newV--;
                                         };
                                     }
                                 }
@@ -5183,17 +5193,19 @@ jQuery = jQuery || window.jQuery;
                      * @returns {String}
                      * @memberOf jS
                      */
-                    reparseFormula:function (formula, offset, loc, isBefore, wasDeleted) {
+                    reparseFormula:function (formula, offset1, loc, isBefore, wasDeleted) {
                         return formula.replace(jSE.regEx.cell, function (ignored, col, row, pos) {
-                            if (col == "SHEET") return ignored;
-                            offset = offset || {loc: 0, row: 0};
-
+                            if (col == "SHEET") return ignored;                           
+                            var offset = offset1 ? { col:offset1.col, row:offset1.row } : {col: 0, row: 0};
+                            
                             var oldLoc = {
-                                    row:row * 1,
-                                    col:jSE.columnLabelIndex(col)
+                                    row:row.replace("$","") * 1,
+                                    col:jSE.columnLabelIndex(col.replace("$",""))
                                 },
                                 moveCol,
                                 moveRow,
+                                fixrow = row[0] == "$",
+                                fixcol = col[0] == "$",
                                 override = {
                                     row: row,
                                     col: col,
@@ -5242,12 +5254,12 @@ jQuery = jQuery || window.jQuery;
 
                                     if (moveCol) {
                                         oldLoc.col += offset.col;
-                                        return jS.makeFormula(oldLoc);
+                                        return jS.makeFormula(oldLoc, null, fixcol, fixrow);
                                     }
 
                                     if (moveRow) {
                                         oldLoc.row += offset.row;
-                                        return jS.makeFormula(oldLoc);
+                                        return jS.makeFormula(oldLoc, null, fixcol, fixrow);
                                     }
                                 } else {
                                     if (isBefore) {
@@ -5268,16 +5280,18 @@ jQuery = jQuery || window.jQuery;
 
                                     if (moveCol) {
                                         oldLoc.col += offset.col;
-                                        return jS.makeFormula(oldLoc);
+                                        return jS.makeFormula(oldLoc, null, fixcol, fixrow);
                                     }
 
                                     if (moveRow) {
                                         oldLoc.row += offset.row;
-                                        return jS.makeFormula(oldLoc);
+                                        return jS.makeFormula(oldLoc, null, fixcol, fixrow);
                                     }
                                 }
                             } else {
-                                return jS.makeFormula(oldLoc, offset);
+                            	if (fixcol) offset.col = 0;
+                            	if (fixrow) offset.row = 0;
+                                return jS.makeFormula(oldLoc, offset, fixcol, fixrow);
                             }
 
                             return ignored;
@@ -5292,7 +5306,7 @@ jQuery = jQuery || window.jQuery;
                      * @returns {String}
                      * @memberOf jS
                      */
-                    makeFormula:function (loc, offset) {
+                    makeFormula:function (loc, offset, fixcol, fixrow) {
                         offset = $.extend({row:0, col:0}, offset);
 
                         //set offsets
@@ -5303,7 +5317,7 @@ jQuery = jQuery || window.jQuery;
                         if (loc.col < 0) loc.col = 0;
                         if (loc.row < 0) loc.row = 0;
 
-                        return jSE.parseCellName(loc.col, loc.row);
+                        return jSE.parseCellName(loc.col, loc.row, fixcol, fixrow);
                     },
 
                     /**
@@ -5824,6 +5838,7 @@ jQuery = jQuery || window.jQuery;
                                     pane.resizeScroll();
                                     jS.followMe();
                                     jS.setDirty(true);
+                                    jS.trigger("sheetUpdate");
                                 },
                                 minWidth: 32
                             });
@@ -5892,6 +5907,7 @@ jQuery = jQuery || window.jQuery;
                                     pane.resizeScroll();
                                     jS.followMe();
                                     jS.setDirty(true);
+                                    jS.trigger("sheetUpdate");
                                 },
                                 minHeight: 15
                             });
@@ -6183,7 +6199,137 @@ jQuery = jQuery || window.jQuery;
 
                         return _grid;
                     },
+                    
+                    setCellBorder:function (borders,grid) {
+                       var changed = [];
+                       var cells = jS.obj.cellsEdited();
+                       var cellsEdited = jS.controls.cellsEdited[jS.i];
+                    	var f = function(td) {                    		
+                    		if (!td[0].jSCell.edited) {
+                                td[0].jSCell.edited = true;
+                                changed.push(td[0]);
+                    		}
+                    		return td;
+                    	};
+                      grid = grid || jS.highlightedLastOrdered();
+                      if (borders.top) {
+                    	  for (var c = grid.start.col;c<=grid.end.col;c++) f(jS.getTd(jS.i, grid.start.row-1 , c)).css("border-bottom", borders.top); 
+                      }
+                      if (borders.bottom) {
+                    	  for (var c = grid.start.col;c<=grid.end.col;c++) f(jS.getTd(jS.i, grid.end.row , c)).css("border-bottom", borders.bottom);
+                      }
+                      if (borders.left) {
+                    	  for (var r = grid.start.row;r<=grid.end.row;r++) f(jS.getTd(jS.i, r, grid.start.col)).css("border-left", borders.left); 
+                      }
+                      if (borders.right) {
+                    	  for (var r = grid.start.row;r<=grid.end.row;r++) f(jS.getTd(jS.i, r, grid.end.col+1)).css("border-left", borders.right); 
+                      }
+                      if (borders.innerH) {
+                    	  for (var c = grid.start.col+1;c<=grid.end.col;c++)
+                    		  for (var r = grid.start.row;r<=grid.end.row;r++)
+                    			  f(jS.getTd(jS.i, r, c)).css("border-left", borders.innerH);
+                      }
+                      if (borders.innerV) {
+                    	  for (var c = grid.start.col;c<=grid.end.col;c++)
+                    		  for (var r = grid.start.row;r<grid.end.row;r++)
+                    			  f(jS.getTd(jS.i, r, c)).css("border-bottom", borders.innerV);
+                      }
+                      
+                      for (var i=0;i<changed.length;i++) {
+                    	   cellsEdited = cells.add(changed[i].jSCell);
+                    	  jS.calcDependencies.call(changed[i].jSCell, null, false);
+                      }
+                      
+                      return false;
+                    },
+                 
+                    
+                    hasStyle : function(className, tds) {
+                    	tds = tds || jS.highlighted();
+                        if (tds.length < 1) {
+                            return false;
+                        }
+                        
+                        return tds[0].className.match(className);
+                    },
 
+                    
+                    /**
+                     * sets cell(s) class for styling
+                     * @param {String} setClass class(es) to set cells to
+                     * @param {String} [removeClass] class(es) to remove from cell if the setClass would conflict with
+                     * @param {Object} [tds]
+                     * @returns {Boolean}
+                     * @memberOf jS
+                     */
+                    cellApply:function (what, doupdate, tds) {
+                        tds = tds || jS.highlighted();
+                        if (tds.length < 1) {
+                            return false;
+                        }
+                        jS.setDirty(true);
+                      
+                        var td,
+                            $td,
+                            i = tds.length - 1,
+                            cells = jS.obj.cellsEdited(),
+                            cellsEdited = jS.controls.cellsEdited[jS.i];
+                       
+                        var changedcells = [];
+                        
+                        if (i >= 0) {                            
+                            do {
+                                td = tds[i];    
+                                if (td.jSCell) changedcells.push(td.jSCell); else changedcells.push(td);
+                                /*
+                                what(td.jSCell);
+
+                                if (!td.jSCell.edited) {
+                                    td.jSCell.edited = true;
+                                    cellsEdited = cells.add(td.jSCell);
+                                }
+                                
+                                if (doupdate) {
+                                  td.jSCell.calcLast = 0;
+                                  jS.updateCellValue.call(td.jSCell);
+                                }
+                                
+                                jS.calcDependencies.call(td.jSCell, null, false);
+                                  */
+                            } while (i--);
+                        
+                        jS.undo.createCells(changedcells, function(cells) {
+                        	for (var idx = 0;idx < cells.length; idx++) {
+                        		var cell = cells[idx];
+                            jS.trigger('sheetPreCalculation', [
+                                {which:'cell', cell:cell}
+                            ]);
+                            what(cell);
+                            jS.setDirty(true);
+                            jS.setChanged(true);
+                            if (doupdate) {
+                              cell.calcLast = 0;
+                              jS.updateCellValue.call(cell);
+                              jS.updateCellDependencies.call(cell);
+                            }
+                            jS.trigger('sheetCalculation', [
+                                {which:'cell', cell: cell}
+                            ]);
+                        	}
+                            return cells;
+                        });
+                        
+                        
+                        
+                        
+
+
+                            return true;
+                        }
+
+                        return false;
+                    },
+                    
                     /**
                      * sets cell(s) class for styling
                      * @param {String} setClass class(es) to set cells to
@@ -6204,40 +6350,42 @@ jQuery = jQuery || window.jQuery;
                             i = tds.length - 1,
                             cells = jS.obj.cellsEdited(),
                             cellsEdited = jS.controls.cellsEdited[jS.i],
-                            hasClass;
-
-                        //TODO: use calcDependencies and sheetPreCalculation to set undo redo data
+                            hasClass;                     
 
                         if (i >= 0) {
                             hasClass = tds[0].className.match(setClass); //go by first element in set
-                            do {
-                                td = tds[i];
-                                $td = $(td);
+                            
+                            jS.cellApply(function(cells) {                             	
+                            	 var $td = $(cells.td);
+                            	 if (removeClass) {//If there is a class that conflicts with this one, we remove it first
+                                     $td.removeClass(removeClass);
+                                 }
 
-                                if (removeClass) {//If there is a class that conflicts with this one, we remove it first
-                                    $td.removeClass(removeClass);
-                                }
+                                 //Now lets add some style
+                                 if (hasClass) {
+                                     $td.removeClass(setClass);
+                                 } else {
+                                     $td.addClass(setClass);
+                                 }
 
-                                //Now lets add some style
-                                if (hasClass) {
-                                    $td.removeClass(setClass);
-                                } else {
-                                    $td.addClass(setClass);
-                                }
-
-                                if (!td.jSCell.edited) {
-                                    td.jSCell.edited = true;
-                                    cellsEdited = cells.add(td.jSCell);
-                                }
-
-                            } while (i--);
-
+                            	                            	
+                            } , true, tds);
+                            
                             return true;
-                        }
+                        }                       
 
                         return false;
                     },
 
+                    getCellType : function(cells) {
+                    	cells = cells || jS.highlighted(true);
+
+                        if (cells.length < 1) {
+                            return;
+                        }
+                        return cells[0].cellType;                        
+                    },
+                    
                     /**
                      * sets cell(s) type
                      * @param {String} [type] cell type
@@ -6253,18 +6401,17 @@ jQuery = jQuery || window.jQuery;
                         }
 
                         var i = cells.length - 1,
-                            remove = cells[i].cellType == type;
+                            remove = false; //cells[i].cellType == type;
 
                         if (i >= 0) {
-                            do {
+                        	jS.cellApply(function (cell) {
+                            
                                 if (remove) {
-                                    cells[i].cellType = null;
+                                    cell.cellType = null;
                                 } else {
-                                    cells[i].cellType = type;
-                                }
-                                cells[i].calcLast = 0;
-                                jS.updateCellValue.call(cells[i]);
-                            } while(i--);
+                                    cell.cellType = type;
+                                }                               
+                        	}, true, cells);
                         }
                     },
 
@@ -6317,6 +6464,41 @@ jQuery = jQuery || window.jQuery;
                         }
                         return false;
                     },
+                    
+                    /**
+                     * Change fonts
+                     * @param {String} direction "up" or "down"
+                     * @param {Object} [tds]
+                     * @memberOf jS
+                     * @returns {Boolean}
+                     */
+                    font:function (face, size, tds) {
+                        tds = tds || jS.highlighted();
+                        if (tds.length < 1) {
+                            return false;
+                        }
+                        
+
+                        //Lets check to remove any style classes
+                        var td,
+                            $td,
+                            i = tds.length - 1,                            
+                            cells = jS.obj.cellsEdited(),
+                            cellsEdited = jS.controls.cellsEdited[jS.i];
+
+                        if (i>0) {
+	                        jS.cellApply(function (cell) {
+	                        
+	                                $td = $(cell.td);
+	                                                                //                                
+	                                if (face) $td.css("font-family", face);
+	                                if (size) $td.css("font-size", (size || 10) + "px");
+	
+	                        }, true, tds);
+                            return true;
+                        }
+                        return false;
+                    },
 
                     /**
                      * Current number of cells being parsed
@@ -6333,7 +6515,7 @@ jQuery = jQuery || window.jQuery;
                      * @returns {*} cell value after calculated
                      * @memberOf jS
                      */
-                    updateCellValue:function (sheetIndex, rowIndex, colIndex) {
+                    updateCellValue:function (sheetIndex, rowIndex, colIndex) {                    
                         var sheet, row, cell, fn;
                         if (!this.type || !this.type == 'cell') {
                             //first detect if the cell exists if not return nothing
@@ -6360,12 +6542,14 @@ jQuery = jQuery || window.jQuery;
                         if (cell.defer) {//merging creates a defer property, which points the cell to another location to get the other value
                             return jS.updateCellValue.call(cell.defer);
                         }
-
-                        cell.state.push('updating');
-                        cell.fnCount = 0;
-                        cell.result = null;
+                      
 
                         if (cell.calcLast != jS.calcLast || cell.calcDependenciesLast != jS.calcDependenciesLast) {
+                        	  cell.state.push('updating');
+                              cell.fnCount = 0;
+                              cell.result = null;
+                        	
+                        	
                             cell.valueOverride = null;
                             cell.calcLast = jS.calcLast;
                             cell.calcDependenciesLast = jS.calcDependenciesLast;
@@ -6390,17 +6574,17 @@ jQuery = jQuery || window.jQuery;
 
                                     jS.callStack++;
                                     formulaParser.setObj(cell);
-                                    cell.result = formulaParser.parse(cell.formula);
+                                    cell.result = formulaParser.parse(cell.formula.replace(/\$/g,''));
                                 } catch (e) {
                                     cell.result = e.toString();
                                 }
                                 jS.callStack--;
 
-                                if (cell.result && cell.cellType && s.cellTypeHandlers[cell.cellType]) {
+                                if (cell.result != null && cell.cellType && s.cellTypeHandlers[cell.cellType]) {
                                     cell.result = s.cellTypeHandlers[cell.cellType].call(cell, cell.result);
                                 }
                                 jS.filterValue.call(cell);
-                            } else if (cell.value && cell.cellType && s.cellTypeHandlers[cell.cellType]) {
+                            } else if (cell.value != null && cell.cellType && s.cellTypeHandlers[cell.cellType]) {
                                 cell.result = s.cellTypeHandlers[cell.cellType].call(cell, cell.value);
                                 jS.filterValue.call(cell);
                             } else {
@@ -6417,9 +6601,19 @@ jQuery = jQuery || window.jQuery;
                                 }
                                 jS.filterValue.call(cell);
                             }
+                            
+                            cell.needsUpdated = false;
+                            cell.state.pop();
+                            
+                            
+                            if (cell.oldValue != cell.value) {
+                            	console.log(cell.oldValue + " -> "+cell.value);
+                              jS.trigger('sheetCalculation', [
+                                 {which:'cell', cell: cell}
+                              ]);
+                            }
                         }
-                        cell.needsUpdated = false;
-                        cell.state.pop();
+                                             
                         return (cell.valueOverride != u ? cell.valueOverride : cell.value);
                     },
 
@@ -6441,7 +6635,11 @@ jQuery = jQuery || window.jQuery;
 
                                 dependantCell.calcDependenciesLast = 0;
 
+                                var old =dependantCell.value;
+                                
                                 jS.updateCellValue.call(dependantCell);
+                               
+                                
                                 if (dependantCellLoc.row > 0 && dependantCellLoc.col > 0) {
                                     jS.updateCellDependencies.call(dependantCell);
                                 }
@@ -6751,7 +6949,7 @@ jQuery = jQuery || window.jQuery;
                          * @returns {*}
                          * @memberOf jS.cellHandler
                          */
-                        remoteCellValue:function (sheet, id) {//Example: SHEET1:A1
+                        remoteCellValue:function (sheet, id) {//Example: SHEET1:A1                        
                             var loc = jSE.parseLocation(id),
                                 sheetIndex = jSE.parseSheetLocation(sheet);
 
@@ -6772,16 +6970,17 @@ jQuery = jQuery || window.jQuery;
                             sheet = jSE.parseSheetLocation(sheet);
                             start = jSE.parseLocation(start);
                             end = jSE.parseLocation(end);
-
+                            
                             var result = [];
 
                             for (var i = start.row; i <= end.row; i++) {
-                                for (var j = start.col; j <= end.col; j++) {
+                                for (var j = start.col; j <= end.col; j++) {                                	
+                                    jS.cellHandler.createDependency.call(this, sheet, {row:i, col:j});
                                     result.push(jS.updateCellValue(sheet, i, j));
                                 }
                             }
 
-                            return [result];
+                            return result;
                         },
 
                         /**
@@ -6859,7 +7058,7 @@ jQuery = jQuery || window.jQuery;
                          * @memberOf jS.cellLookupHandlers
                          */
                         remoteCellValue:function (sheet, id) {
-                            return [jS.sheet, jSE.parseLocation(id), jSE.parseLocation(id)];
+                            return [jSE.parseSheetLocation(sheet), jSE.parseLocation(id), jSE.parseLocation(id)];
                         },
 
                         /**
@@ -7645,13 +7844,9 @@ jQuery = jQuery || window.jQuery;
                         var i = cells.length - 1;
 
                         if ( i >= 0) {
-                            jS.undo.createCells(cells, function(cells) { //save state, make it undoable
-                                do {
-                                    cells[i].td.css(style, value);
-                                } while(i--);
-
-                                return cells;
-                            });
+                        	jS.cellApply(function(cell) {
+                        		cell.td.css(style, value);
+                        	}, true, cells);                            
                             return true;
                         }
 
@@ -8129,11 +8324,17 @@ jQuery = jQuery || window.jQuery;
                                 cell.html = clone.html;
                                 cell.state = clone.state;
                                 cell.jS = clone.jS;
+                                cell.cellType = clone.cellType;
+                                if (clone.extra) cell.extra = JSON.parse(clone.extra);
                                 cell.calcDependenciesLast = clone.calcDependenciesLast;
+                                                                
                                 cell.td.attr('style', clone.style);
-                                cell.td.attr('class', clone.cl);
+                                cell.td.attr('class', clone.cl.replace("ui-state-highlight",""));
 
                                 jS.updateCellValue.call(cell);
+                                jS.trigger('sheetCalculation', [
+                                  {which:'cell', cell: cell}
+                                ]);
                             }
                         }
                     },
@@ -9037,8 +9238,8 @@ jQuery = jQuery || window.jQuery;
          * @returns {String}
          * @memberOf jQuery.sheet.engine
          */
-        parseCellName:function (col, row) {
-            return jSE.columnLabelString(col) + (row || '');
+        parseCellName:function (col, row, fixcol, fixrow) {
+            return (fixcol ? "$" : "") + jSE.columnLabelString(col) + (fixrow ? "$" : "") + (row || '');
         },
 
         /**
@@ -9104,7 +9305,7 @@ jQuery = jQuery || window.jQuery;
          */
         regEx: {
             n: 			    /[\$,\s]/g,
-            cell: 			/\$?([a-zA-Z]+|[#]REF[!])\$?([0-9]+|[#]REF[!])/gi, //a1
+            cell: 			/(\$?[a-zA-Z]+|[#]REF[!])(\$?[0-9]+|[#]REF[!])/gi, //a1
             range: 			/\$?([a-zA-Z]+)\$?([0-9]+):\$?([a-zA-Z]+)\$?([0-9]+)/gi, //a1:a4
             remoteCell:		/\$?(SHEET+)\$?([0-9]+)[:!]\$?([a-zA-Z]+)\$?([0-9]+)/gi, //sheet1:a1
             remoteCellRange:/\$?(SHEET+)\$?([0-9]+)[:!]\$?([a-zA-Z]+)\$?([0-9]+):\$?([a-zA-Z]+)\$?([0-9]+)/gi, //sheet1:a1:b4

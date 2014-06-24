@@ -104,6 +104,7 @@
 							if (column['style']) td.attr('style', column['style'] || '');
 							if (column['formula']) td.attr('data-formula', (column['formula'] ? '=' + column['formula'] : ''));
 							if (column['cellType']) td.attr('data-celltype', column['cellType'] || '');
+							if (column['extra']) td.attr('data-extra', JSON.stringify(column['extra']) || '');
 							if (column['value']) td.html(column['value'] || '');
 							if (column['rowspan']) td.attr('rowspan', column['rowspan'] || '');
 							if (column['colspan']) td.attr('colspan', column['colspan'] || '');
@@ -319,7 +320,7 @@
 			 * }]</pre>
 			 * @memberOf jQuery.sheet.dts.fromTables
 			 */
-			json: function(jS, doNotTrim) {
+			json: function(jS, doNotTrim, noData) {
 				doNotTrim = (doNotTrim == undefined ? false : doNotTrim);
 
 				var output = [],
@@ -368,6 +369,22 @@
 							};
 
 						column = spreadsheet[row].length - 1;
+						if (noData) 
+							{
+							  cell = spreadsheet[row][column];
+							  if (!jsonRow["height"]) {
+								jsonRow["height"] = (parent.style['height'] ? parent.style['height'].replace('px' , '') : jS.s.colMargin);
+							  }
+							  
+							  if (row * 1 == 1) {
+								  do {
+									cell = spreadsheet[row][column];
+									jsonSpreadsheet.metadata.widths.unshift($(jS.col(null, column)).css('width').replace('px', ''));
+								  } while (column-- > 1);
+							  }
+							  
+							  rowHasValues = true;
+							} else
 						do {
 							cell = spreadsheet[row][column];
 							jsonColumn = {};
@@ -400,6 +417,12 @@
 								}
 								if (attr['rowspan']) jsonColumn['rowspan'] = attr['rowspan'].value;
 								if (attr['colspan']) jsonColumn['colspan'] = attr['colspan'].value;
+								if (cell.extra) jsonColumn['extra'] = cell.extra;
+								//if (jsonColumn.value || jsonColumn['class'] || jsonColumn.style) {
+									jsonColumn['row'] = row;
+									jsonColumn['col'] = column;
+									jsonColumn['sheet'] = sheet;
+								//}
 							}
 
 							if (row * 1 == 1) {
