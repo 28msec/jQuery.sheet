@@ -2935,7 +2935,10 @@ jQuery = jQuery || window.jQuery;
                                 if (indexes.length != this.i || style) {
                                     this.i = indexes.length || this.i;
 
-                                    style = style || self.nthCss('col', '#' + jS.id + jS.i, indexes, jS.frozenAt().col + 1) +
+                                    var show = "";
+                                    for (var idx in indexes) show += '#' + jS.id + jS.i+" .c"+indexes[idx]+" { display:table-cell; } ";
+                                    
+                                    style = style || show + self.nthCss('col', '#' + jS.id + jS.i, indexes, jS.frozenAt().col + 1) +
                                         self.nthCss('td', '#' + jS.id + jS.i + ' ' + 'tr', indexes, jS.frozenAt().col + 1);
 
                                     this.css(style);
@@ -2956,10 +2959,12 @@ jQuery = jQuery || window.jQuery;
 
                                 if (indexes.length != this.i || style) {
                                     this.i = indexes.length || this.i;
-
-                                    style = style || self.nthCss('tr', '#' + jS.id + jS.i, indexes, jS.frozenAt().row + 1);
-
-                                    this.css(style);
+                                    var show = "";
+                                    for (var idx in indexes) show += '#' + jS.id + jS.i+" .r"+indexes[idx]+" { display:table-cell } ";
+                                    
+                                    style = style || show + self.nthCss('tr', '#' + jS.id + jS.i, indexes, jS.frozenAt().row + 1);
+                                    
+                                    this.css(style);                                   
 
                                     jS.scrolledTo();
 
@@ -4870,7 +4875,12 @@ jQuery = jQuery || window.jQuery;
                                 lastLoc.row = firstLocRaw.row;                                
                             }
 
-                            if (td.getAttribute('rowSpan') || td.getAttribute('colSpan')) {
+                            var rs = td.getAttribute('rowSpan');
+                            var cs = td.getAttribute('colSpan');
+                            
+                            
+                            
+                            if ((rs && rs > 1) || (cs && cs > 1)) {
                                 return false;
                             }
 
@@ -4883,6 +4893,8 @@ jQuery = jQuery || window.jQuery;
                                 firstLoc.col = lastLocRaw.col;
                                 lastLoc.col = firstLocRaw.col;
                             }
+                            
+                            var cls = "merge c"+(firstLoc.col+1)+" r"+(firstLoc.row+1);
 
                             rowSpan = (lastLoc.row - firstLoc.row) + 1;
                             colSpan = (lastLoc.col - firstLoc.col) + 1;
@@ -4897,6 +4909,8 @@ jQuery = jQuery || window.jQuery;
                                 }
                                 s.parent.one('sheetPreCalculation', function () {
                                     if (_td.cellIndex != loc.col || _td.parentNode.rowIndex != loc.row) {
+                                    	if (_td.getAttribute('rowSpan') > 1 || _td.getAttribute('colSpan') > 1) jS.unmerge(_td);
+                                    	
                                         cell.formula = null;
                                         cell.value = '';
                                         cell.html = '';
@@ -4906,7 +4920,7 @@ jQuery = jQuery || window.jQuery;
                                         _td.removeAttribute('data-formula');
                                         _td.removeAttribute('data-celltype')
                                         _td.innerHTML = '';
-                                        $(_td).addClasses("merge c"+firstLoc.col+" r"+firstLoc.row);
+                                        $(_td).addClass(cls);
                                         // _td.style.display = 'none';
                                     }
                                 });
@@ -4919,7 +4933,7 @@ jQuery = jQuery || window.jQuery;
                             td.jSCell.calcLast = last;
 
                             //td.style.display = '';
-                            $(_td).removeClasses("merge c"+firstLoc.col+" r"+firstLoc.row);
+                            $(_td).removeClass(cls);
                             td.setAttribute('rowSpan', rowSpan);
                             td.setAttribute('colSpan', colSpan);
 
@@ -4955,11 +4969,12 @@ jQuery = jQuery || window.jQuery;
                             return false;
                         }
 
+                        var cls = "merge c"+(loc.col-1)+" r"+(loc.row-1);
                         do {
                             j = loc.col + col;
                             do {
-                                _td = jS.getTd(jS.i, i, j)[0];
-                                _td.style.display = '';
+                                _td = jS.getTd(jS.i, i, j)[0];                                
+                                 $(_td).removeClass(cls);
                                 _td.removeAttribute('colSpan');
                                 _td.removeAttribute('rowSpan');
                                 _td.jSCell.defer = null;
