@@ -11251,7 +11251,7 @@ jQuery = jQuery || window.jQuery;
             notExactMatch = notExactMatch !== undefined ? notExactMatch : true;
 
             if (isNaN(value)) {
-                var i = tableArray[0].indexOf(value);
+                var i = tableArray.indexOf(value);
                 if (i > -1) {
                     result = jS.updateCellValue(lookupTable[i].sheet, indexNumber, jS.getTdLocation(lookupTable[i].td).col);
                 }
@@ -11283,10 +11283,12 @@ jQuery = jQuery || window.jQuery;
                 lookupTable = this.jS.cellLookup.call(this),
                 result = {html: '#N/A', value:''};
 
+            indexNumber = indexNumber || 1;
             notExactMatch = notExactMatch !== undefined ? notExactMatch : true;
 
             if (isNaN(value)) {
-                var i = tableArray[0].indexOf(value);
+                var i = tableArray.indexOf(value);
+               
                 if (i > -1) {
                     result = jS.updateCellValue(lookupTable[i].sheet, jS.getTdLocation(lookupTable[i].td).row, indexNumber);
                 }
