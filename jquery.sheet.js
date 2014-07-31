@@ -11288,7 +11288,7 @@ jQuery = jQuery || window.jQuery;
             if (isNaN(value)) {
                 var i = tableArray[0].indexOf(value);
                 if (i > -1) {
-                    result = jS.updateCellValue(lookupTable[i].sheet, indexNumber, jS.getTdLocation(lookupTable[i].td).col);
+                    result = jS.updateCellValue(lookupTable[i].sheet, jS.getTdLocation(lookupTable[i].td).row, indexNumber);
                 }
             } else {
                 arrHelpers.getClosestNum(value, tableArray[0], function(closest, i) {
